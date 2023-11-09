@@ -12,6 +12,50 @@ contains
 
 
 
+! subroutine calculate_intercepted_area(id, separation, radius, disrupt, area)
+  
+!   ! Calculate intercepted area
+  
+!   implicit none
+
+!   integer, intent(in) :: id
+!   real(dp), intent(in) :: separation, radius, disrupt 
+!   real(dp), intent(out) :: area
+!   real(dp) :: depth
+!   integer :: ierr
+
+!   type(star_info), pointer :: s
+!     include 'formats'
+!     ierr = 0
+!     call star_ptr(id, s, ierr)
+!     if (ierr /= 0) return
+
+!   ! Initialization, pointers, checks
+
+!   depth = calculate_penetration_depth(radius, s%r(1), separation)
+
+!   if (depth > 0 .and. separation > s%r(1)-radius .and. disrupt <= 1) then
+!     area = intercepted_area(depth, radius) 
+!   else
+!     area = pi*radius**2
+!   end if
+
+! contains
+
+!   function calculate_penetration_depth(radius, rstar, separation)
+!     real(dp) :: calculate_penetration_depth
+!     real(dp), intent(in) :: radius, rstar, separation
+!     calculate_penetration_depth = radius + rstar - separation 
+!   end function
+
+!   function intercepted_area(x, radius)
+!     real(dp) :: intercepted_area
+!     real(dp), intent(in) :: x, radius  
+!     ! Calculation
+!   end function
+
+! end subroutine
+
 
 subroutine calculate_intercepted_area (id, Orbital_separation, R_influence, f_disruption, area)
      implicit none
@@ -52,7 +96,6 @@ subroutine calculate_intercepted_area (id, Orbital_separation, R_influence, f_di
 end subroutine calculate_intercepted_area
 
 
-
 function intercepted_area(x, radius) result(area)
 
   ! Calculate 2D Intercepted area of planet grazing host star noting that the radius is not
@@ -80,28 +123,31 @@ function intercepted_area(x, radius) result(area)
 
 end function intercepted_area
 
+     
+function calculate_penetration_depth(r_inf, r_star, separation) result(depth)
+  
+  real(dp) :: depth
+  real(dp), intent(in) :: r_inf, r_star, separation
 
+  depth = r_inf + r_star - separation
+  depth = max(depth, 0.0_dp)
 
-real(dp) function calculate_penetration_depth(R_influence, R_star, Orbital_separation) result(penetration_depth)
-     real(dp) :: R_influence, R_star, Orbital_separation
-     penetration_depth = R_influence + R_star - Orbital_separation
-     if (penetration_depth < 0d0) penetration_depth = 0d0
-    ! write(*,*)'From penetration_depth, R_influence,Orbital_separation,penetration_depth' &
-    ! ,R_influence,Orbital_separation,penetration_depth
 end function calculate_penetration_depth
 
-real(dp) function check_disruption(M_companion,R_companion,v_planet,rho_ambient) result(f)
-   ! f > 1 means disruption. This is expected when the ram pressure integrated
-   ! over the planet cross section approaches the planet binding energy
-     real(dp), intent(in) :: M_companion,R_companion,v_planet,rho_ambient
-     real(dp) :: v_esc_planet_square, rho_planet
-     rho_planet = 3d0*M_companion/(4d0*pi*pow(R_companion, 3d0))
-     v_esc_planet_square = standard_cgrav*M_companion/R_companion
-   ! Eq.5 in Jia & Spruit 2018  https://arxiv.org/abs/1808.00467
-     f = (rho_ambient*pow(v_planet, 2d0)) / (rho_planet*v_esc_planet_square)
-    ! write(*,*)'From Check_Disruption rho_ambient, rho_planet, v_planet, f', &
-    !           rho_ambient, rho_planet, v_planet, f
+
+function check_disruption(m_comp, r_comp, v_planet, rho_ambient) result(f_disrupt)
+
+  real(dp) :: f_disrupt
+  real(dp), intent(in) :: m_comp, r_comp, v_planet, rho_ambient
+
+  real(dp) :: v_esc2, rho_planet
+
+  rho_planet = 3.0_dp*m_comp/(4.0_dp*pi*powe(r_comp,3.0))
+  v_esc2 = standard_cgrav*m_comp/r_comp
+
+  ! See Jia & Spruit 2018, Eq. 5 
+  f_disrupt = (rho_ambient*v_planet**2) / (rho_planet*v_esc2)
+
 end function check_disruption
 
-      
 end module 
