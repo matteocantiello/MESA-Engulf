@@ -200,7 +200,7 @@
         ! Check if the companion has been destroyed by ram pressure (f>1). This probably only applies to planetary engulfments.
         f_disruption = check_disruption(M_companion,R_companion,v_kepler,rho_bar)   
 
-        call calculate_intercepted_area (id, Orbital_separation, R_influence, f_disruption, area) 
+        call calculate_cross_section (id, Orbital_separation, R_influence, f_disruption, area) 
 
         ! If (s% x_logical_ctrl(2)) and R_bondi < R_companion + alphaHp , then calculate 
         
@@ -638,7 +638,7 @@
            !write(*,*)'From outside grazer',s% model_number,R_influence/Rsun,(R_influence + s% r(1) - Orbital_separation)/Rsun,&
           !               penetration_depth/Rsun, R_influence/Rsun,s% r(1)/Rsun,Orbital_separation/Rsun
            if (penetration_depth <= 2d0*R_influence) then
-               call calculate_intercepted_area(id, Orbital_separation, R_influence, 0.0_dp, area) 
+               call calculate_cross_section(id, Orbital_separation, R_influence, 0.0_dp, area) 
               grazing_phase = .true.
           !  write(*,*)'From grazer 1: r_infl, Orbital_separation-r_infl,Rstar,penetration,Deltar', &
           !              s% model_number,R_influence/Rsun,(Orbital_separation-R_influence)/Rsun,s% r(1)/Rsun, &

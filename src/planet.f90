@@ -11,53 +11,9 @@ public
 contains
 
 
+subroutine calculate_cross_section (id, Orbital_separation, R_influence, f_disruption, area)
+! Calculate cross section used for drag calculation 
 
-! subroutine calculate_intercepted_area(id, separation, radius, disrupt, area)
-  
-!   ! Calculate intercepted area
-  
-!   implicit none
-
-!   integer, intent(in) :: id
-!   real(dp), intent(in) :: separation, radius, disrupt 
-!   real(dp), intent(out) :: area
-!   real(dp) :: depth
-!   integer :: ierr
-
-!   type(star_info), pointer :: s
-!     include 'formats'
-!     ierr = 0
-!     call star_ptr(id, s, ierr)
-!     if (ierr /= 0) return
-
-!   ! Initialization, pointers, checks
-
-!   depth = calculate_penetration_depth(radius, s%r(1), separation)
-
-!   if (depth > 0 .and. separation > s%r(1)-radius .and. disrupt <= 1) then
-!     area = intercepted_area(depth, radius) 
-!   else
-!     area = pi*radius**2
-!   end if
-
-! contains
-
-!   function calculate_penetration_depth(radius, rstar, separation)
-!     real(dp) :: calculate_penetration_depth
-!     real(dp), intent(in) :: radius, rstar, separation
-!     calculate_penetration_depth = radius + rstar - separation 
-!   end function
-
-!   function intercepted_area(x, radius)
-!     real(dp) :: intercepted_area
-!     real(dp), intent(in) :: x, radius  
-!     ! Calculation
-!   end function
-
-! end subroutine
-
-
-subroutine calculate_intercepted_area (id, Orbital_separation, R_influence, f_disruption, area)
      implicit none
      integer, intent(in) :: id
      real(dp), intent(in) :: Orbital_separation, R_influence, f_disruption
@@ -72,9 +28,8 @@ subroutine calculate_intercepted_area (id, Orbital_separation, R_influence, f_di
          if (ierr /= 0) return
 
 
-        ! Calculate area used for drag calculation 
         penetration_depth = 0d0
-        area = 0d0 ! Initialize cross section of companion (physical or Bondi) for calculating aerodynamic or gravitational drag
+        area = 0d0  
 
       ! Do the calculation only if this is a grazing collision and if the planet has not been destroyed yet
         if (Orbital_separation > s% r(1) + R_influence) then
@@ -84,21 +39,19 @@ subroutine calculate_intercepted_area (id, Orbital_separation, R_influence, f_di
         endif
 
         if (penetration_depth >= 0.0 .and. (Orbital_separation >= (s% r(1) - R_influence)) .and. (f_disruption <= 1d0)) then
-            ! Calculate intersected area. Rstar-rr is x in sketch
+            ! Calculate intercepted cross section 
               area = intercepted_area (penetration_depth, R_influence)
-            !  write(*,*) 'Grazing Collision. Engulfed area fraction: ', s% model_number, area/(pi * pow(R_influence, 2.0))
         else
-            ! Full engulfment. Cross section area = Planet area
+            ! Full engulfment. Cross section = Planet cross section or Bondi cross section 
               area = pi * pow(R_influence, 2d0)
-            !  write(*,*) 'Full engulfment. R_influence, area',s% model_number,R_influence/Rsun,area
         end if
 
-end subroutine calculate_intercepted_area
+end subroutine calculate_cross_section
 
 
 function intercepted_area(x, radius) result(area)
 
-  ! Calculate 2D Intercepted area of planet grazing host star noting that the radius is not
+  ! Calculate 2D plane parallel intercepted area of planet grazing host star noting that the radius is not
   ! necessarily the radius of the planet, it could be the Bondi radius if it is larger.
 
   implicit none
@@ -142,7 +95,7 @@ function check_disruption(m_comp, r_comp, v_planet, rho_ambient) result(f_disrup
 
   real(dp) :: v_esc2, rho_planet
 
-  rho_planet = 3.0_dp*m_comp/(4.0_dp*pi*powe(r_comp,3.0))
+  rho_planet = 3.0_dp*m_comp/(4.0_dp*pi*r_comp**3.0_dp)
   v_esc2 = standard_cgrav*m_comp/r_comp
 
   ! See Jia & Spruit 2018, Eq. 5 
