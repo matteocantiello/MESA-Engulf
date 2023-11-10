@@ -36,10 +36,8 @@
       use drag_module
       use search_module 
       use planet_module 
-     ! use area_module 
 
       implicit none
-
 
     ! These variables can be saved in photos and restored at restarts
       real(dp) :: Orbital_separation, Deltar, Deltar_tides, R_bondi, R_influence
@@ -68,6 +66,7 @@
 
        ! Uncomment these lines if you wish to use the functions in this file,
        ! otherwise we use a null_ version which does nothing.
+
          s% other_energy => engulfment_energy
 
          s% extras_startup => extras_startup
@@ -93,223 +92,187 @@
 
       end subroutine extras_controls
 
+
+
       subroutine engulfment_energy(id, ierr)
-        integer, intent(in) :: id
-        integer, intent(out) :: ierr
-        logical :: restart, first
-        type (star_info), pointer :: s
-        integer :: k, nz
-        integer :: krr_center, krr_bottom, krr_top
-        real(dp) :: e_orbit, M_companion, R_companion, area, de, sound_speed, R_influence, R_scale_height
-        real(dp) :: rr, v_kepler,rho_bar, dmsum
-        real(dp) :: f_disruption
-        real(dp) :: penetration_depth
-        real(dp) :: t_tide
-        real(dp) :: de_orbital_change, enclosed_mass
-        ierr = 0
-
-      ! Reads model infos from star structure s. Initialize variables.
-        call star_ptr(id, s, ierr)
-        if (ierr /= 0) return
 
 
-        nz = s% nz               ! Mesh size (primary)
+         integer, intent(in) :: id
+         integer, intent(out) :: ierr
+         logical :: restart, first
+         type (star_info), pointer :: s
+     
+         integer :: k, nz
+         integer :: krr_center, krr_bottom, krr_top
+         real(dp) :: e_orbit, M_companion, R_companion, area, de, sound_speed, R_influence, R_scale_height
+         real(dp) :: rr, v_kepler,rho_bar, dmsum
+         real(dp) :: f_disruption
+         real(dp) :: penetration_depth
+         real(dp) :: t_tide
+         real(dp) :: de_orbital_change, enclosed_mass
+         ierr = 0
+     
+       ! Reads model infos from star structure s. Initialize variables.
+         call star_ptr(id, s, ierr)
+         if (ierr /= 0) return
+     
+         nz = s% nz                    ! Mesh size (primary)
+         do k = 1, nz
+             s% extra_heat(k) = 0d0    ! Initialize extra_heat vector
+         end do
          
-        do k = 1, nz
-            s% extra_heat(k) = 0d0    ! Initialize extra_heat vector
-        end do
-        
-
-      ! Initialize injected energy and radial coordinate change
-        de = 0d0
-        Deltar = 0d0
-        f_disruption = 0d0
-        R_bondi = 0d0
-        R_scale_height = 0d0
-        
-
-
-      ! Mass and radius of injested companion from inlist. Also include a stop point for companion (x_ctrl(3) in Rsun) in case we want to stop before destruction.
-        M_companion = s% x_ctrl(1) * Msun
-        R_companion = s% x_ctrl(2) * Rsun
-
-
-      ! Skip energy deposition if the star is in the initial relaxation phase
-       if (s% doing_relax) return
-      
-
-      ! Orbital_separation is the coordinate of the planet's center wrt the primary's core.
-      ! If it's a restart, MESA will remember the radial location of the
-      ! companion, Orbital_separation, from a photo. This is because we are moving Orbital_separation data in
-      ! photos using 'move_extra_info' and this data is retrieved in 'extras_startup' using 'unpack_extra_info'
-
-      ! Calculate orbital keplerian velocity of the companion (we assume circular orbits)
-      ! If the companion's centre is outside the primary this is easyly done, but if it is inside, we need to use
-      ! only the mass of the primary inside the orbit, so we need to locate the index where the companion core is.
-      ! Calculate the bondi radius of the companion using a sound speed of 10 km/s outside the star (typical ISM)
-        
-        krr_center=1
-
-        if (Orbital_separation > s% r(1)) then
-            call calculate_orbital_velocity(s% m(1), Orbital_separation, v_kepler)
-            sound_speed = 10. * 1.d5 ! set c_sound to be ISM in cgs
-        else
-            do while (krr_center >= 1 .and. krr_center < nz .and. s% r(krr_center) >= Orbital_separation)
-                krr_center = krr_center + 1
-            end do
-            call calculate_orbital_velocity(s% m(krr_center), s% r(krr_center), v_kepler)
-            sound_speed = s% csound(krr_center)
-        endif
-
-
-        !########################### TIDES ######################################
-
-        ! Calculate tidal timescale (according to Hansen et al. 2010, which uses Hut formalism)
-        ! When Orbital_separation < R_star we assume that only the mass and radius of the star within the orbital separation play a role
-        if (s% x_ctrl(8) > 0.0) then
-            call calculate_tidal_timescale(s% m(krr_center), M_companion, s% r(krr_center), &
+       ! Initialize injected energy and radial coordinate change
+     
+         de = 0d0
+         Deltar = 0d0
+         f_disruption = 0d0
+         R_bondi = 0d0
+         R_scale_height = 0d0
+         
+       ! Mass and radius of injested companion from inlist. Also include a stop point for companion (x_ctrl(3) in Rsun) in case we want to stop before destruction.
+         M_companion = s% x_ctrl(1) * Msun
+         R_companion = s% x_ctrl(2) * Rsun
+     
+     
+       ! Skip energy deposition if the star is in the initial relaxation phase
+        if (s% doing_relax) return
+       
+     
+       ! Orbital_separation is the coordinate of the planet's center wrt the primary's core.
+       ! If it's a restart, MESA will remember the radial location of the
+       ! companion, Orbital_separation, from a photo. This is because we are moving Orbital_separation data in
+       ! photos using 'move_extra_info' and this data is retrieved in 'extras_startup' using 'unpack_extra_info'
+     
+       ! Calculate orbital keplerian velocity of the companion (we assume circular orbits)
+       ! If the companion's centre is outside the primary this is easyly done, but if it is inside, we need to use
+       ! only the mass of the primary inside the orbit, so we need to locate the index where the companion core is.
+       ! Calculate the bondi radius of the companion using a sound speed of 10 km/s outside the star (typical ISM)
+         
+         krr_center=1
+     
+         if (Orbital_separation > s% r(1)) then
+             call calculate_orbital_velocity(s% m(1), Orbital_separation, v_kepler)
+             sound_speed = 10. * 1.d5 ! set c_sound to be ISM in cgs
+         else
+             do while (krr_center >= 1 .and. krr_center < nz .and. s% r(krr_center) >= Orbital_separation)
+                 krr_center = krr_center + 1
+             end do
+             call calculate_orbital_velocity(s% m(krr_center), s% r(krr_center), v_kepler)
+             sound_speed = s% csound(krr_center)
+         endif
+     
+     
+         ! Tidal effects
+         ! Calculate tidal timescale (according to Hansen et al. 2010, which uses Hut formalism)
+         ! When Orbital_separation < R_star we assume that only the mass and radius of the star within the orbital separation play a role
+         if (s% x_ctrl(8) > 0.0) then
+             call calculate_tidal_timescale(s% m(krr_center), M_companion, s% r(krr_center), &
              R_companion, Orbital_separation, s% x_ctrl(8), t_tide)
             Deltar_tides = (s% dt/t_tide) * Orbital_separation
-          else
-            Deltar_tides = 0.0
-            t_tide = 0.0 ! This should be +inf
-        end if
-
-        if (.not. s% x_logical_ctrl(1) .and. Orbital_separation <= s% r(1)) then ! No tides if a<R (if s% x_logical_ctrl(1) = .false.)
-          Deltar_tides = 0.0
-          t_tide = 0.0 ! This should be +inf*
-        end if
-
-        !########################### END TIDES ######################################
-
-
-        call calculate_bondi_radius(M_companion, sound_speed, v_kepler, R_bondi)
-
-        R_influence = max(R_bondi,R_companion)  ! Choose radius to be used to calculate area in drag routine (R_bondi -> Gravodrag, R_companion -> Aerodynamic drag)
-
-
-        ! locate_on_grid takes Orbital_separation and a radius,
-        ! and determines the corresponding grid points of center (krr_center), and center +- radius (krr_top, krr_bottom)
-        ! Calculate mass contained in the spherical shell occupied by the companion (shellular approximation)
-        ! and the mass-weighted density of the region of impact for drag calculation
-
-        call locate_on_grid(id, Orbital_separation, R_influence, krr_bottom ,krr_center, krr_top)
-        dmsum = sum(s% dm(krr_top:krr_bottom))
-        rho_bar = dot_product (s% rho(krr_top:krr_bottom), s% dm(krr_top:krr_bottom))/dmsum
-
-        ! Check if the companion has been destroyed by ram pressure (f>1). This probably only applies to planetary engulfments.
-        f_disruption = check_disruption(M_companion,R_companion,v_kepler,rho_bar)   
-
-        call calculate_cross_section (id, Orbital_separation, R_influence, f_disruption, area) 
-
-        ! If (s% x_logical_ctrl(2)) and R_bondi < R_companion + alphaHp , then calculate 
-        
-        R_scale_height = s% x_ctrl(9)*s% scale_height(krr_center)
-
-        if (s% x_logical_ctrl(2) .and. R_companion+R_scale_height > R_bondi) then  ! If x_logical_ctrl(2) true deposit energy in Rp+- alpha*hp
-            call locate_on_grid(id, Orbital_separation, R_companion+R_scale_height, krr_bottom ,krr_center, krr_top)
-            dmsum = sum(s% dm(krr_top:krr_bottom))
-        end if   
-
-
-
-      ! If the companion has not been destroyed by ram pressure, deposit drag luminosity and heat the envelope
-      ! Spread in the region occupied by the planet or by Bondi sphere, whichever is larger. If the option is selected,
-      ! the code can also spread in a region alpha*HP above an below the planet. 
-      ! Update radial coordinate of the engulfed planet too.
-      ! The strategy is to use drag to estimate Deltar. And then inject the amount of energy corresponding to the corresponding change in orbital energy.
-
-        if ( f_disruption < 1d0 .and. area > 0.0 ) then
-
-              call calculate_drag (s% m(krr_center), M_companion, area, rho_bar, s% dt, Orbital_separation, de, Deltar)
-              de_orbital_change = calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation)  
-              ! write(*,*) 'E_orb(a), Orbital_separation-Deltar-Deltar_tides', de_orbital_change, Orbital_separation,Orbital_separation-Deltar-Deltar_tides
-              de_orbital_change = de_orbital_change - calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation-Deltar-Deltar_tides)
-
-
-
-            !write(*,*) 'k center next step, de', krr_center, de_orbital_change 
-            !write(*,*) 'M1, M2, a, E, G' , s% m(krr_center),M_companion,Orbital_separation, calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation),standard_cgrav
-            !write(*,*) 'de_orbital_change, de, de/de_orbital_change', de_orbital_change, de, de/de_orbital_change ! Slight discrepancy between these two because De is approximate (de is in ergs)
-              
-            de = de_orbital_change ! Set this to be the exact change in orbital energy. This way we also account for some extra heating coming from tides (very small contribution), but only when the secondary is engulfed. 
-
-            !  write(*,'(A,i4,2f10.4,2e15.4,f12.4,e12.4,e12.4)')'after call drag', s% model_number, s% m(krr_center)/Msun, &
-						!		       area, rho_bar_drag, s% dt, Orbital_separation/Rsun, de, Deltar/Rsun
-
-            ! If the planet has not been destroyed by ram pressure, deposit drag luminosity and heat the envelope
-            ! Spread in the region occupied by the planet or by the Bondi sphere, whichever is larger.
-            ! If the option is selected, the code will deposit in a region extended above and below the planet alpha*HP
-            ! Update radial coordinate of the engulfed planet in 'extras_finish_step' using Deltar.
-           
-             ! Only inject energy if the secondary object geometrically overlaps with the primary
-             
-             !write(*,*) 'R_bondi / R_companion', R_bondi/R_companion
-             !write(*,*) 'krr_bottom_companion, krr_bottom_bondi, krr_center', krr_bottom_companion, krr_bottom_bondi, krr_center
-             !write(*,*) 'krr_top_companion, krr_top_bondi, krr_center', krr_top_companion, krr_top_bondi, krr_center
-             !write(*,*)'min(krr_top_bondi,krr_top_companion), max(krr_bottom_bondi,krr_bottom_companion)', min(krr_top_bondi,krr_top_companion), max(krr_bottom_bondi,krr_bottom_companion)
-
+           else
+             Deltar_tides = 0.0_dp
+             t_tide = huge(1.0_dp)
+           end if
+     
+         if (.not. s% x_logical_ctrl(1) .and. Orbital_separation <= s% r(1)) then ! No tides if a<R (if s% x_logical_ctrl(1) = .false.)
+           Deltar_tides = 0.0
+           t_tide = huge(1.0_dp)
+         end if
+     
+     
+         call calculate_bondi_radius(M_companion, sound_speed, v_kepler, R_bondi)
+         R_influence = max(R_bondi,R_companion)  ! Choose radius to be used to calculate area in drag routine (R_bondi -> Gravodrag, R_companion -> Aerodynamic drag)
+     
+     
+         ! locate_on_grid takes Orbital_separation and a radius,
+         ! and determines the corresponding grid points of center (krr_center), and center +- radius (krr_top, krr_bottom)
+         ! Calculate mass contained in the spherical shell occupied by the companion (shellular approximation)
+         ! and the mass-weighted density of the region of impact for drag calculation
+     
+         call locate_on_grid(id, Orbital_separation, R_influence, krr_bottom ,krr_center, krr_top)
+         dmsum = sum(s% dm(krr_top:krr_bottom))
+         rho_bar = dot_product (s% rho(krr_top:krr_bottom), s% dm(krr_top:krr_bottom))/dmsum
+     
+         ! Check if the companion has been destroyed by ram pressure (f>1). This criterion is mostly relevant for planetary engulfments.
+         f_disruption = check_disruption(M_companion,R_companion,v_kepler,rho_bar)   
+     
+         call calculate_cross_section (id, Orbital_separation, R_influence, f_disruption, area) 
+         
+         R_scale_height = s% x_ctrl(9)*s% scale_height(krr_center)
+     
+         if (s% x_logical_ctrl(2) .and. R_companion+R_scale_height > R_bondi) then  ! If x_logical_ctrl(2) true deposit energy in Rp+- alpha*hp
+             call locate_on_grid(id, Orbital_separation, R_companion+R_scale_height, krr_bottom ,krr_center, krr_top)
+             dmsum = sum(s% dm(krr_top:krr_bottom))
+         end if   
+     
+       ! If the companion has not been destroyed by ram pressure, deposit drag luminosity and heat the envelope
+       ! Spread in the region occupied by the planet or by Bondi sphere, whichever is larger. If the option is selected,
+       ! the code can also spread in a region alpha*HP above an below the planet. 
+       ! Update radial coordinate of the engulfed planet too.
+       ! The strategy is to use drag to estimate Deltar. And then inject the amount of energy corresponding to the corresponding change in orbital energy.
+     
+         if ( f_disruption < 1d0 .and. area > 0.0 ) then
+     
+               call calculate_drag (s% m(krr_center), M_companion, area, rho_bar, s% dt, Orbital_separation, de, Deltar)
+               de_orbital_change = calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation)  
+               ! write(*,*) 'E_orb(a), Orbital_separation-Deltar-Deltar_tides', de_orbital_change, Orbital_separation,Orbital_separation-Deltar-Deltar_tides
+               de_orbital_change = de_orbital_change - calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation-Deltar-Deltar_tides)
+               
+             de = de_orbital_change ! Set this to be the exact change in orbital energy. 
+             ! This way we also account for some extra heating coming from tides (very small contribution), but only when the secondary is engulfed. 
+     
+     
+             ! If the planet has not been destroyed by ram pressure, deposit drag luminosity and heat the envelope
+             ! Spread in the region occupied by the planet or by the Bondi sphere, whichever is larger.
+             ! If the option is selected, the code will deposit in a region extended above and below the planet alpha*HP
+             ! Update radial coordinate of the engulfed planet in 'extras_finish_step' using Deltar.
             
-             do k = krr_top, krr_bottom
-                s% extra_heat(k) = de/dmsum/s% dt ! Uniform heating (erg/g/sec)      
-             end do     
-
-
-               ! Check fraction of orbital energy that was injected   
-              !call orbital_energy(s% m(krr_center), M_companion,Orbital_separation, e_orbit)
-              !write(*,*) 'Injected Energy / Orbital Energy: ', abs(de/e_orbit) 
-              ! Check de /  injected_specific_luminosity
-              !write(*,*) 'de_calculated / injected', de/(injected_specific_luminosity* s% dt * dmsum_drag) 
+              ! Only inject energy if the secondary object geometrically overlaps with the primary
              
-        endif 
-
-        if (f_disruption >= 1d0 ) then 
-              write(*,*) '***************** Planet destroyed at R/Rsun = ', Orbital_separation/Rsun,'*********************'
-              Deltar = 0d0
-              f_disruption = 1d0
-              s% use_other_energy = .false.
-              stop_age = s% star_age + 1d1 * s% kh_timescale
-              write(*,*)'stop_age and KH timescale are',stop_age, s% kh_timescale
-        endif
-
-  
-
-        ! Debug 
-        !if (s% x_logical_ctrl(2)) then 
-        !      write(*,*) 'Check we have injected correctly: (de_orb/dt) / dl_injected = ', (de/s% dt) / (injected_specific_luminosity*dmsum_companion_hp)
-        !     else 
-        !       write(*,*) 'Check we have injected correctly: (de_orb/dt) / dl_injected = ', (de/s% dt) / (injected_specific_luminosity*dmsum_drag)  
-        !end if   
-
-                
-        ! Save enclosed mass at timestep
-        enclosed_mass = s% m(krr_center)
-        !e_orbit = calculate_orbital_energy(s% m(krr_center),M_companion,Orbital_separation)
-        !write(*,*) 'from Function e_orbit' , e_orbit 
-
-        !write(*,*) 'Disruption Factor:', f_disruption
-        !write(*,*) 'FROM ENERGY: deltar, dt, e_orbit ', deltar, s% dt, e_orbit
-
-      ! write(*,*) 'Tidal Timescale (yrs): ',t_tide/secyer, 'Tidal Da (Rsun): ', Deltar_tides/Rsun, s% dt
-
-        ! Save variables for history
-
-          s% xtra(1) = v_kepler/1d5                ! Orbital velocity (km/s)
-          s% xtra(2) = Deltar                      ! Infall distance due to drag (cm)
-          s% xtra(3) = de                          ! Injected energy (erg)
-          s% xtra(4) = f_disruption                ! Disruption factor
-          s% xtra(5) = area/(pi * pow(R_influence, 2d0))  ! Engulfed fraction
-          s% xtra(6) = dmsum/Msun                  ! Heated mass (Msun)
-          s% xtra(7) = R_bondi/Rsun                ! Bondi radius (Rsun)
-          s% xtra(8) = sound_speed/1.d5            ! Sound speed (km/s)
-          s% xtra(9) = t_tide/secyer               ! Tidal timescale (yrs)
-          s% xtra(10) = Deltar_tides               ! Infall distance due to tides (cm)
-          s% xtra(11) = Deltar/s% dt/1e5           ! Infall velocity (drag) (km/s)
-          s% xtra(12) = enclosed_mass              ! Enclosed stellar mass at companion location  
-          s% xtra(13) = rho_bar                    ! Average Density at companion location
-
-      end subroutine engulfment_energy
-
+              do k = krr_top, krr_bottom
+                 s% extra_heat(k) = de/dmsum/s% dt ! Uniform heating (erg/g/sec)      
+              end do     
+     
+         endif 
+     
+         if (f_disruption >= 1d0 ) then 
+               write(*,*) '***************** Planet destroyed at R/Rsun = ', Orbital_separation/Rsun,'*********************'
+               Deltar = 0d0
+               f_disruption = 1d0
+               s% use_other_energy = .false.
+               stop_age = s% star_age + 1d1 * s% kh_timescale
+               write(*,*)'stop_age and KH timescale are',stop_age, s% kh_timescale
+         endif
+     
+     
+         ! Debug 
+         !if (s% x_logical_ctrl(2)) then 
+         !      write(*,*) 'Check we have injected correctly: (de_orb/dt) / dl_injected = ', (de/s% dt) / (injected_specific_luminosity*dmsum_companion_hp)
+         !     else 
+         !       write(*,*) 'Check we have injected correctly: (de_orb/dt) / dl_injected = ', (de/s% dt) / (injected_specific_luminosity*dmsum_drag)  
+         !end if   
+     
+                 
+         ! Save enclosed mass at timestep
+         enclosed_mass = s% m(krr_center)
+        
+         ! Save variables for history
+     
+           s% xtra(1) = v_kepler/1d5                ! Orbital velocity (km/s)
+           s% xtra(2) = Deltar                      ! Infall distance due to drag (cm)
+           s% xtra(3) = de                          ! Injected energy (erg)
+           s% xtra(4) = f_disruption                ! Disruption factor
+           s% xtra(5) = area/(pi * pow(R_influence, 2d0))  ! Engulfed fraction
+           s% xtra(6) = dmsum/Msun                  ! Heated mass (Msun)
+           s% xtra(7) = R_bondi/Rsun                ! Bondi radius (Rsun)
+           s% xtra(8) = sound_speed/1.d5            ! Sound speed (km/s)
+           s% xtra(9) = t_tide/secyer               ! Tidal timescale (yrs)
+           s% xtra(10) = Deltar_tides               ! Infall distance due to tides (cm)
+           s% xtra(11) = Deltar/s% dt/1e5           ! Infall velocity (drag) (km/s)
+           s% xtra(12) = enclosed_mass              ! Enclosed stellar mass at companion location  
+           s% xtra(13) = rho_bar                    ! Average Density at companion location
+     
+       end subroutine engulfment_energy
 
 
 
